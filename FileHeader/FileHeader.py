@@ -34,6 +34,7 @@ footer = [
     '',
     ' ',
     '$filename ends here',
+    '',
 ]
 
 # list all supported keywords
@@ -55,8 +56,12 @@ class FileHeaderCommand(sublime_plugin.TextCommand):
 
     def run(self, edit):
         """ Generate header and footer. """
-        self._generate_header(edit)
-        self._generate_footer(edit)
+        newl, comm = self._get_newline_and_comment(0)
+
+        hdr = self._generate_comments(header, newl, comm)
+        ftr = self._generate_comments(footer, newl, comm)
+        self._write_comments(hdr, 0, edit)
+        self._write_comments(ftr, self.view.size(), edit)
 
     def filename(self):
         """ Return the name of the file.
@@ -70,29 +75,23 @@ class FileHeaderCommand(sublime_plugin.TextCommand):
         else:
             return path.basename(name)
 
-    def _generate_header(self, edit):
-        """ Generate header. """
-        newl, comm = self._get_newline_and_comment(0)
-        empties = empty_count(reversed(header))
-        commented_header = self._render_header(header[:-empties], comm)
-        comment_list = ['' for i in range(empties)]
-        commented_header += comment_list
-        self.view.insert(
-            edit,
-            0,
-            self._comments_to_string(commented_header, newl))
+    def _generate_comments(self, lines, newline, comment):
+        """ Generate file header or footer. """
+        # calculate number of empty lines (i.e. no comment character)
+        empties_pre = self._empty_count(lines)
+        empties_post = self._empty_count(reversed(lines))
+        # generate comment lines
+        comment_lines = self._render_comments(
+            lines[empties_pre:(len(lines) - empties_post)], comment)
+        # add empty lines
+        empties_pre = ['' for i in range(empties_pre)]
+        empties_post = ['' for i in range(empties_post)]
+        comment_lines = empties_pre + comment_lines + empties_post
+        # convert to string and return
+        return self._comments_to_string(comment_lines, newline)
 
-    def _generate_footer(self, edit):
-        """ Generate footer. """
-        newl, comm = self._get_newline_and_comment(self.view.size())
-        empties = empty_count(footer)
-        commented_header = self._render_header(footer[empties:], comm)
-        comment_list = ['' for i in range(empties)]
-        comment_list += commented_header
-        self.view.insert(
-            edit,
-            self.view.size(),
-            self._comments_to_string(comment_list, newl))
+    def _write_comments(self, comment, point, edit):
+        self.view.insert(edit, point, comment)
 
     def _get_newline_and_comment(self, point):
         """ Return newline and comment character.
@@ -139,7 +138,7 @@ class FileHeaderCommand(sublime_plugin.TextCommand):
             line)
         return line
 
-    def _render_header(self, lines, comment_mark):
+    def _render_comments(self, lines, comment_mark):
         """ Call `_render_comment` for each line. """
         lines = map(self._render_comment, lines)
         return ['%s %s' % (comment_mark, line) for line in lines]
